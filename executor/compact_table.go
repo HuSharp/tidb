@@ -231,7 +231,7 @@ func (task *storeCompactTask) logProgressOptionally() {
 //	The remaining partitions in this store should be cancelled, and tasks of other stores should also be cancelled.
 //
 // During this function, some "problems" will cause it to early return, e.g. physical table not exist in this
-// store any more (maybe caused by DDL). No errors will be produced so that remaining partitions will continue
+// store anymore (maybe caused by DDL). No errors will be produced so that remaining partitions will continue
 // being compacted.
 //
 //	Returns: (stopAllTasks, err)
