@@ -17,6 +17,7 @@ package unistore
 import (
 	"context"
 	"errors"
+	"github.com/pingcap/kvproto/pkg/meta_storagepb"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -42,6 +43,18 @@ type pdClient struct {
 		sync.RWMutex
 		groups map[string]*rmpb.ResourceGroup
 	}
+}
+
+func (c *pdClient) Watch(ctx context.Context, key []byte, opts ...pd.OpOption) (chan []*meta_storagepb.Event, error) {
+	return nil, nil
+}
+
+func (c *pdClient) Get(ctx context.Context, key []byte, opts ...pd.OpOption) (*meta_storagepb.GetResponse, error) {
+	return nil, nil
+}
+
+func (c *pdClient) Put(ctx context.Context, key []byte, value []byte, opts ...pd.OpOption) (*meta_storagepb.PutResponse, error) {
+	return nil, nil
 }
 
 func (c *pdClient) GetTSWithinKeyspace(ctx context.Context, keyspaceID uint32) (int64, int64, error) {

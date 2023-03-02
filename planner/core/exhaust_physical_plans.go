@@ -1886,12 +1886,12 @@ func (p *LogicalJoin) tryToGetIndexJoin(prop *property.PhysicalProperty) (indexJ
 			if p.hintInfo != nil && p.preferJoinType > 0 {
 				t := p.hintInfo.indexNestedLoopJoinTables
 				switch {
-				case len(t.inljTables) != 0:
+				case len(t.inljTables) != 0 && ((p.preferJoinType&preferLeftAsINLJInner > 0) || (p.preferJoinType&preferRightAsINLJInner > 0)):
 					errMsg = fmt.Sprintf("Optimizer Hint %s or %s is inapplicable",
 						restore2JoinHint(HintINLJ, t.inljTables), restore2JoinHint(TiDBIndexNestedLoopJoin, t.inljTables))
-				case len(t.inlhjTables) != 0:
+				case len(t.inlhjTables) != 0 && ((p.preferJoinType&preferLeftAsINLHJInner > 0) || (p.preferJoinType&preferRightAsINLHJInner > 0)):
 					errMsg = fmt.Sprintf("Optimizer Hint %s is inapplicable", restore2JoinHint(HintINLHJ, t.inlhjTables))
-				case len(t.inlmjTables) != 0:
+				case len(t.inlmjTables) != 0 && ((p.preferJoinType&preferLeftAsINLMJInner > 0) || (p.preferJoinType&preferRightAsINLMJInner > 0)):
 					errMsg = fmt.Sprintf("Optimizer Hint %s is inapplicable", restore2JoinHint(HintINLMJ, t.inlmjTables))
 				}
 			}
@@ -2363,7 +2363,7 @@ func pushLimitOrTopNForcibly(p LogicalPlan) bool {
 }
 
 func (lt *LogicalTopN) getPhysTopN(_ *property.PhysicalProperty) []PhysicalPlan {
-	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
+	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopMultiReadTaskType}
 	if !pushLimitOrTopNForcibly(lt) {
 		allTaskTypes = append(allTaskTypes, property.RootTaskType)
 	}
@@ -2374,9 +2374,10 @@ func (lt *LogicalTopN) getPhysTopN(_ *property.PhysicalProperty) []PhysicalPlan 
 	for _, tp := range allTaskTypes {
 		resultProp := &property.PhysicalProperty{TaskTp: tp, ExpectedCnt: math.MaxFloat64}
 		topN := PhysicalTopN{
-			ByItems: lt.ByItems,
-			Count:   lt.Count,
-			Offset:  lt.Offset,
+			ByItems:     lt.ByItems,
+			PartitionBy: lt.PartitionBy,
+			Count:       lt.Count,
+			Offset:      lt.Offset,
 		}.Init(lt.ctx, lt.stats, lt.blockOffset, resultProp)
 		ret = append(ret, topN)
 	}
@@ -2389,7 +2390,7 @@ func (lt *LogicalTopN) getPhysLimits(_ *property.PhysicalProperty) []PhysicalPla
 		return nil
 	}
 
-	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
+	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopMultiReadTaskType}
 	if !pushLimitOrTopNForcibly(lt) {
 		allTaskTypes = append(allTaskTypes, property.RootTaskType)
 	}
@@ -2397,8 +2398,9 @@ func (lt *LogicalTopN) getPhysLimits(_ *property.PhysicalProperty) []PhysicalPla
 	for _, tp := range allTaskTypes {
 		resultProp := &property.PhysicalProperty{TaskTp: tp, ExpectedCnt: float64(lt.Count + lt.Offset), SortItems: p.SortItems}
 		limit := PhysicalLimit{
-			Count:  lt.Count,
-			Offset: lt.Offset,
+			Count:       lt.Count,
+			Offset:      lt.Offset,
+			PartitionBy: lt.GetPartitionBy(),
 		}.Init(lt.ctx, lt.stats, lt.blockOffset, resultProp)
 		limit.SetSchema(lt.Schema())
 		ret = append(ret, limit)
@@ -2650,6 +2652,7 @@ func (p *baseLogicalPlan) canPushToCopImpl(storeTp kv.StoreType, considerDual bo
 			if (isTopN || isLimit) && considerIndexMerge {
 				return false // TopN and Limit cannot be pushed down to IndexMerge
 			}
+
 			if c.tableInfo.TableCacheStatusType != model.TableCacheStatusDisable {
 				// Don't push to cop for cached table, it brings more harm than good:
 				// 1. Those tables are small enough, push to cop can't utilize several TiKV to accelerate computation.
@@ -2714,7 +2717,7 @@ func (la *LogicalAggregation) getEnforcedStreamAggs(prop *property.PhysicalPrope
 	if !prop.IsPrefix(childProp) {
 		return enforcedAggs
 	}
-	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
+	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopMultiReadTaskType}
 	if la.HasDistinct() {
 		// TODO: remove AllowDistinctAggPushDown after the cost estimation of distinct pushdown is implemented.
 		// If AllowDistinctAggPushDown is set to true, we should not consider RootTask.
@@ -2870,6 +2873,7 @@ func (la *LogicalAggregation) tryToGetMppHashAggs(prop *property.PhysicalPropert
 		partitionCols := la.GetPotentialPartitionKeys()
 		// trying to match the required partitions.
 		if prop.MPPPartitionTp == property.HashType {
+			// partition key required by upper layer is subset of current layout.
 			if matches := prop.IsSubsetOf(partitionCols); len(matches) != 0 {
 				partitionCols = choosePartitionKeys(partitionCols, matches)
 			} else {
@@ -2896,6 +2900,7 @@ func (la *LogicalAggregation) tryToGetMppHashAggs(prop *property.PhysicalPropert
 		}
 
 		// 2-phase agg
+		// no partition property down，record partition cols inside agg itself, enforce shuffler latter.
 		childProp := &property.PhysicalProperty{TaskTp: property.MppTaskType, ExpectedCnt: math.MaxFloat64, MPPPartitionTp: property.AnyType, RejectSort: true}
 		agg := NewPhysicalHashAgg(la, la.stats.ScaleByExpectCnt(prop.ExpectedCnt), childProp)
 		agg.SetSchema(la.schema.Clone())
@@ -2917,6 +2922,7 @@ func (la *LogicalAggregation) tryToGetMppHashAggs(prop *property.PhysicalPropert
 		agg := NewPhysicalHashAgg(la, la.stats.ScaleByExpectCnt(prop.ExpectedCnt), childProp)
 		agg.SetSchema(la.schema.Clone())
 		if la.HasDistinct() || la.HasOrderBy() {
+			// mpp scalar mode means the data will be pass through to only one tiFlash node at last.
 			agg.MppRunMode = MppScalar
 		} else {
 			agg.MppRunMode = MppTiDB
@@ -2961,7 +2967,7 @@ func (la *LogicalAggregation) getHashAggs(prop *property.PhysicalProperty) []Phy
 		return nil
 	}
 	hashAggs := make([]PhysicalPlan, 0, len(prop.GetAllPossibleChildTaskTypes()))
-	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
+	taskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopMultiReadTaskType}
 	canPushDownToTiFlash := la.canPushToCop(kv.TiFlash)
 	canPushDownToMPP := canPushDownToTiFlash && la.ctx.GetSessionVars().IsMPPAllowed() && la.checkCanPushDownToMPP()
 	if la.HasDistinct() {
@@ -3101,7 +3107,7 @@ func (p *LogicalLimit) exhaustPhysicalPlans(prop *property.PhysicalProperty) ([]
 		return nil, true, nil
 	}
 
-	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopDoubleReadTaskType}
+	allTaskTypes := []property.TaskType{property.CopSingleReadTaskType, property.CopMultiReadTaskType}
 	if !pushLimitOrTopNForcibly(p) {
 		allTaskTypes = append(allTaskTypes, property.RootTaskType)
 	}
@@ -3112,8 +3118,9 @@ func (p *LogicalLimit) exhaustPhysicalPlans(prop *property.PhysicalProperty) ([]
 	for _, tp := range allTaskTypes {
 		resultProp := &property.PhysicalProperty{TaskTp: tp, ExpectedCnt: float64(p.Count + p.Offset)}
 		limit := PhysicalLimit{
-			Offset: p.Offset,
-			Count:  p.Count,
+			Offset:      p.Offset,
+			Count:       p.Count,
+			PartitionBy: p.GetPartitionBy(),
 		}.Init(p.ctx, p.stats, p.blockOffset, resultProp)
 		limit.SetSchema(p.Schema())
 		ret = append(ret, limit)
