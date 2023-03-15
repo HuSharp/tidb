@@ -279,7 +279,7 @@ replace (
 	// fix potential security issue(CVE-2020-26160) introduced by indirect dependency.
 	github.com/dgrijalva/jwt-go => github.com/form3tech-oss/jwt-go v3.2.6-0.20210809144907-32ab6a8243d7+incompatible
 	github.com/pingcap/tidb/parser => ./parser
-	github.com/tikv/client-go/v2 => github.com/HuSharp/client-go/v2 v2.0.0-20230315001858-3d732d18a0b7
-	github.com/tikv/pd/client => github.com/HuSharp/pd/client v0.0.0-20230314092430-8b8ecdfeb286
+	github.com/tikv/client-go/v2 => github.com/HuSharp/client-go/v2 v2.0.0-20230315152237-05daab9d2292
+	github.com/tikv/pd/client => github.com/HuSharp/pd/client v0.0.0-20230315151531-dec90065cc87
 	go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
 )
