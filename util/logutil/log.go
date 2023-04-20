@@ -92,7 +92,7 @@ func NewLogConfig(level, format, slowQueryFile string, fileCfg FileLogConfig, di
 const (
 	// SlowLogTimeFormat is the time format for slow log.
 	SlowLogTimeFormat = time.RFC3339Nano
-	// OldSlowLogTimeFormat is the first version of the the time format for slow log, This is use for compatibility.
+	// OldSlowLogTimeFormat is the first version of the time format for slow log, This is use for compatibility.
 	OldSlowLogTimeFormat = "2006-01-02-15:04:05.999999999 -0700"
 )
 

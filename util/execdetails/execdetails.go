@@ -36,6 +36,7 @@ type ExecDetails struct {
 	CommitDetail     *util.CommitDetails
 	LockKeysDetail   *util.LockKeysDetails
 	ScanDetail       *util.ScanDetail
+	RuDetail         *util.RURuntimeStats
 	CopTime          time.Duration
 	BackoffTime      time.Duration
 	LockKeysDuration time.Duration
@@ -121,6 +122,8 @@ const (
 	RocksdbBlockReadByteStr = "Rocksdb_block_read_byte"
 	// RocksdbBlockReadTimeStr means the time spent on rocksdb block read.
 	RocksdbBlockReadTimeStr = "Rocksdb_block_read_time"
+	// RUKeyStr means the RU detail.
+	RUKeyStr = "RU_key"
 )
 
 // String implements the fmt.Stringer interface.
@@ -262,6 +265,9 @@ func (d ExecDetails) ToZapFields() (fields []zap.Field) {
 	}
 	if d.ScanDetail != nil && d.ScanDetail.ProcessedKeys > 0 {
 		fields = append(fields, zap.String(strings.ToLower(ProcessKeysStr), strconv.FormatInt(d.ScanDetail.ProcessedKeys, 10)))
+	}
+	if d.RuDetail != nil && d.RuDetail.WRU()+d.RuDetail.RRU() > 0 {
+		fields = append(fields, zap.String(strings.ToLower(RUKeyStr), d.RuDetail.String()))
 	}
 	commitDetails := d.CommitDetail
 	if commitDetails != nil {

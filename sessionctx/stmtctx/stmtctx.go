@@ -994,6 +994,7 @@ func (sc *StatementContext) MergeExecDetails(details *execdetails.ExecDetails, c
 		sc.mu.execDetails.RequestCount++
 		sc.MergeScanDetail(details.ScanDetail)
 		sc.MergeTimeDetail(details.TimeDetail)
+		sc.MergeRUDetail(details.RuDetail)
 		sc.mu.allExecDetails = append(sc.mu.allExecDetails,
 			&execdetails.DetailsNeedP90{
 				BackoffSleep:  details.BackoffSleep,
@@ -1027,6 +1028,11 @@ func (sc *StatementContext) MergeScanDetail(scanDetail *util.ScanDetail) {
 func (sc *StatementContext) MergeTimeDetail(timeDetail util.TimeDetail) {
 	sc.mu.execDetails.TimeDetail.ProcessTime += timeDetail.ProcessTime
 	sc.mu.execDetails.TimeDetail.WaitTime += timeDetail.WaitTime
+}
+
+// MergeRUDetail merges ru details into self.
+func (sc *StatementContext) MergeRUDetail(ruDetail *util.RURuntimeStats) {
+	sc.mu.execDetails.RuDetail.Merge(ruDetail)
 }
 
 // MergeLockKeysExecDetails merges lock keys execution details into self.
