@@ -671,6 +671,8 @@ type Storage interface {
 	Close() error
 	// UUID return a unique ID which represents a Storage.
 	UUID() string
+	// ClusterID returns the TiKV cluster ID.
+	ClusterID() uint64
 	// CurrentVersion returns current max committed version with the given txnScope (local or global).
 	CurrentVersion(txnScope string) (Version, error)
 	// GetOracle gets a timestamp oracle client.

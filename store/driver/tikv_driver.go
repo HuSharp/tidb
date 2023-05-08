@@ -352,6 +352,10 @@ func (s *tikvStore) StartGCWorker() error {
 	return nil
 }
 
+func (s *tikvStore) ClusterID() uint64 {
+	return s.GetClusterID()
+}
+
 func (s *tikvStore) GetClient() kv.Client {
 	return s.coprStore.GetClient()
 }

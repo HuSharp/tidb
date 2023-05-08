@@ -49,6 +49,8 @@ func (*Store) Close() error { return nil }
 // UUID implements kv.Storage interface.
 func (*Store) UUID() string { return "mock" }
 
+func (*Store) ClusterID() uint64 { return 0 }
+
 // CurrentVersion implements kv.Storage interface.
 func (*Store) CurrentVersion(_ string) (kv.Version, error) { return kv.Version{}, nil }
 

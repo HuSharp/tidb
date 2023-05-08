@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tidb/metrics"
 	"github.com/pingcap/tidb/parser/model"
 	derr "github.com/pingcap/tidb/store/driver/error"
+	"github.com/pingcap/tidb/store/pdtypes"
 	"github.com/pingcap/tidb/tablecodec"
 	"github.com/pingcap/tidb/util"
 	"github.com/pingcap/tidb/util/codec"
@@ -59,6 +60,7 @@ type Storage interface {
 	GetMPPClient() kv.MPPClient
 	Close() error
 	UUID() string
+	ClusterID() uint64
 	CurrentVersion(txnScope string) (kv.Version, error)
 	CurrentTimestamp(txnScop string) (uint64, error)
 	GetOracle() oracle.Oracle
@@ -1018,6 +1020,49 @@ func (h *Helper) GetPDRegionStats(tableID int64, stats *PDRegionStats, noIndexSt
 	dec := json.NewDecoder(resp.Body)
 
 	return dec.Decode(stats)
+}
+
+type minResolvedTS struct {
+	IsRealTime      bool             `json:"is_real_time,omitempty"`
+	MinResolvedTS   uint64           `json:"min_resolved_ts"`
+	PersistInterval pdtypes.Duration `json:"persist_interval,omitempty"`
+}
+
+// GetStoreMinResolvedTS gets the min resolved ts of a store.
+func (h *Helper) GetStoreMinResolvedTS() (uint64, error) {
+	pdAddrs, err := h.GetPDAddr()
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	statURL := fmt.Sprintf("%s://%s/pd/api/v1/min-resolved-ts/store_id=%s",
+		util.InternalHTTPSchema(),
+		pdAddrs[0],
+		url.QueryEscape(strconv.FormatUint(h.Store.ClusterID(), 10)))
+
+	resp, err := util.InternalHTTPClient().Get(statURL)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	defer func() {
+		if err = resp.Body.Close(); err != nil {
+			logutil.BgLogger().Error("err", zap.Error(err))
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return 0, errors.Errorf("GetStoreMinResolvedTS %d: %s", resp.StatusCode, err)
+		}
+		return 0, errors.Errorf("GetStoreMinResolvedTS %d: %s", resp.StatusCode, string(body))
+	}
+	dec := json.NewDecoder(resp.Body)
+	var resolvedTS minResolvedTS
+	if err := dec.Decode(&resolvedTS); err != nil {
+		return 0, errors.Trace(err)
+	}
+
+	return resolvedTS.MinResolvedTS, nil
 }
 
 // DeletePlacementRule is to delete placement rule for certain group.

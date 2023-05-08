@@ -69,6 +69,10 @@ func (s *mockStorage) Name() string {
 	return "mock-storage"
 }
 
+func (s *mockStorage) ClusterID() uint64 {
+	return s.GetClusterID()
+}
+
 func (s *mockStorage) Describe() string {
 	return ""
 }
