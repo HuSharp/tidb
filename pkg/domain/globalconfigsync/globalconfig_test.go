@@ -16,17 +16,18 @@ package globalconfigsync_test
 
 import (
 	"context"
+	"path"
 	"runtime"
 	"testing"
 	"time"
 
+	"github.com/pingcap/kvproto/pkg/meta_storagepb"
 	"github.com/pingcap/tidb/pkg/domain/globalconfigsync"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit/testsetup"
 	"github.com/stretchr/testify/require"
-	pd "github.com/tikv/pd/client"
 	"go.etcd.io/etcd/tests/v3/integration"
 	"go.opencensus.io/stats/view"
 	"go.uber.org/goleak"
@@ -56,7 +57,10 @@ func TestGlobalConfigSyncer(t *testing.T) {
 	}()
 	client := store.(kv.StorageWithPD).GetPDClient()
 	syncer := globalconfigsync.NewGlobalConfigSyncer(client)
-	syncer.Notify(pd.GlobalConfigItem{Name: "a", Value: "b"})
+	syncer.Notify(meta_storagepb.PutRequest{
+		Key:   []byte(path.Join(globalconfigsync.GlobalConfigPath, "a")),
+		Value: []byte("b"),
+	})
 	err = syncer.StoreGlobalConfig(context.Background(), <-syncer.NotifyCh)
 	require.NoError(t, err)
 	items, revision, err := client.LoadGlobalConfig(context.Background(), []string{"a"}, "")
@@ -97,16 +101,16 @@ func TestStoreGlobalConfig(t *testing.T) {
 		client :=
 			store.(kv.StorageWithPD).GetPDClient()
 		// enable top sql will be translated to enable_resource_metering
-		items, _, err := client.LoadGlobalConfig(context.Background(), []string{"enable_resource_metering", "source_id"}, "")
+		resp, err := client.Get(context.Background(), []byte(globalconfigsync.GlobalConfigPath))
 		require.NoError(t, err)
-		if len(items) == 2 && items[0].Value == "" {
+		if len(resp.Kvs) == 2 && string(resp.Kvs[0].Value) == "" {
 			continue
 		}
-		require.Len(t, items, 2)
-		require.Equal(t, items[0].Name, "/global/config/enable_resource_metering")
-		require.Equal(t, items[0].Value, "true")
-		require.Equal(t, items[1].Name, "/global/config/source_id")
-		require.Equal(t, items[1].Value, "2")
+		require.Len(t, resp.Kvs, 2)
+		require.Equal(t, string(resp.Kvs[0].Key), "/global/config/enable_resource_metering")
+		require.Equal(t, string(resp.Kvs[0].Value), "true")
+		require.Equal(t, string(resp.Kvs[1].Key), "/global/config/source_id")
+		require.Equal(t, string(resp.Kvs[1].Value), "2")
 		return
 	}
 	require.Fail(t, "timeout for waiting global config synced")

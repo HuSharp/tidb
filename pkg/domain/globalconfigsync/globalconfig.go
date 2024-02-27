@@ -16,40 +16,44 @@ package globalconfigsync
 
 import (
 	"context"
-
+	"github.com/pingcap/kvproto/pkg/meta_storagepb"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
 
+// GlobalConfigPath as Etcd prefix
+const GlobalConfigPath = "/global/config/"
+
 // GlobalConfigSyncer is used to sync pd global config.
 type GlobalConfigSyncer struct {
 	pd       pd.Client
-	NotifyCh chan pd.GlobalConfigItem
+	NotifyCh chan meta_storagepb.PutRequest
 }
 
 // NewGlobalConfigSyncer creates a GlobalConfigSyncer.
 func NewGlobalConfigSyncer(p pd.Client) *GlobalConfigSyncer {
 	return &GlobalConfigSyncer{
 		pd:       p,
-		NotifyCh: make(chan pd.GlobalConfigItem, 8),
+		NotifyCh: make(chan meta_storagepb.PutRequest, 8),
 	}
 }
 
 // StoreGlobalConfig is used to store global config.
-func (s *GlobalConfigSyncer) StoreGlobalConfig(ctx context.Context, item pd.GlobalConfigItem) error {
+func (s *GlobalConfigSyncer) StoreGlobalConfig(ctx context.Context, putReq meta_storagepb.PutRequest) error {
 	if s.pd == nil {
 		return nil
 	}
-	err := s.pd.StoreGlobalConfig(ctx, "", []pd.GlobalConfigItem{item})
+	_, err := s.pd.Put(ctx, putReq.Key, putReq.Value)
 	if err != nil {
 		return err
 	}
-	logutil.BgLogger().Info("store global config", zap.String("name", item.Name), zap.String("value", item.Value))
+
+	logutil.BgLogger().Info("store global config", zap.String("name", string(putReq.Key)), zap.String("value", string(putReq.Value)))
 	return nil
 }
 
 // Notify pushes global config to internal channel and will be sync into pd's GlobalConfig.
-func (s *GlobalConfigSyncer) Notify(globalConfigItem pd.GlobalConfigItem) {
-	s.NotifyCh <- globalConfigItem
+func (s *GlobalConfigSyncer) Notify(putReq meta_storagepb.PutRequest) {
+	s.NotifyCh <- putReq
 }

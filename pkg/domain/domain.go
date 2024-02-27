@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,8 +30,8 @@ import (
 	"github.com/ngaut/pools"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/kvproto/pkg/meta_storagepb"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/kvproto/pkg/pdpb"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/streamhelper"
 	"github.com/pingcap/tidb/br/pkg/streamhelper/daemon"
@@ -541,7 +542,10 @@ func (do *Domain) InfoSyncer() *infosync.InfoSyncer {
 
 // NotifyGlobalConfigChange notify global config syncer to store the global config into PD.
 func (do *Domain) NotifyGlobalConfigChange(name, value string) {
-	do.globalCfgSyncer.Notify(pd.GlobalConfigItem{Name: name, Value: value, EventType: pdpb.EventType_PUT})
+	do.globalCfgSyncer.Notify(meta_storagepb.PutRequest{
+		Key:   []byte(path.Join(globalconfigsync.GlobalConfigPath, name)),
+		Value: []byte(value),
+	})
 }
 
 // GetGlobalConfigSyncer exports for testing.

@@ -364,11 +364,23 @@ func (c *pdClient) GetLocalTSWithinKeyspaceAsync(ctx context.Context, dcLocation
 }
 
 func (c *pdClient) Get(ctx context.Context, key []byte, opts ...pd.OpOption) (*meta_storagepb.GetResponse, error) {
-	return nil, nil
+	var kvs []*meta_storagepb.KeyValue
+	for k, v := range c.globalConfig {
+		if strings.Contains(k, string(key)) {
+			kvs = append(kvs, &meta_storagepb.KeyValue{
+				Key:   []byte(k),
+				Value: []byte(v),
+			})
+		}
+	}
+	return &meta_storagepb.GetResponse{
+		Kvs: kvs,
+	}, nil
 }
 
 func (c *pdClient) Put(ctx context.Context, key []byte, value []byte, opts ...pd.OpOption) (*meta_storagepb.PutResponse, error) {
-	return nil, nil
+	c.globalConfig[string(key)] = string(value)
+	return &meta_storagepb.PutResponse{}, nil
 }
 
 func (c *pdClient) GetMinTS(ctx context.Context) (int64, int64, error) {
